@@ -42,7 +42,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = 3000;
+const PORT = 3002;
 
 const startServer = async () => {
   await connectDB();
