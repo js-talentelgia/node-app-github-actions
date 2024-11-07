@@ -18,7 +18,7 @@ jobs:
         
     # Set the operating system for the job.
     runs-on: ubuntu-latest
-    
+
     # Define steps to be executed as part of the job.
     steps:
 
@@ -39,7 +39,7 @@ jobs:
           npm install
           npm run build
 
-      # Install dependencies and build the server application.
+      # Install dependencies and build the server application..
       - name: Install Dependencies and Build Server
         working-directory: ./api
         run: |
