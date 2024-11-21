@@ -1,7 +1,7 @@
 # The name of the workflow.
 name: MERN CI/CD
 
-# Define when the workflow should run (on push to main branch).
+# Define when the workflow should run (on push to the main branch).
 on:
   push:
     branches:
@@ -39,74 +39,53 @@ jobs:
           npm install
           npm run build
 
-      # Install dependencies and build the server application..
-      - name: Install Dependencies and Build Server
+      # Install dependencies and prepare the server application.
+      - name: Install Dependencies for Server
         working-directory: ./api
         run: |
           npm install
 
-  # Deploy job
-  deploy:
+  # Server deployment job
+  server:
     # Define dependencies on the build job
     needs: [build]
     
     # Set the operating system for the job.
     runs-on: ubuntu-latest
-      
+    
     # Define steps to be executed as part of the job.
     steps:
-          
       # Checkout the code from the GitHub repository.
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2 
       
-      # Build Client Docker Image
-      - name: Build Client Docker Image
-        working-directory: ./client
+      # SSH and deploy to the server
+      - name: Build & Deploy
+        env:
+          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOSTNAME: ${{ secrets.SSH_HOST }}
+          USER_NAME: ${{ secrets.USER_NAME }}
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/blog-application:client-${{github.run_number}} .
-      
-      # Build Server Docker Image
-      - name: Build Server Docker Image
-        working-directory: ./api
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/blog-application:api-${{github.run_number}} . 
-      
-      # Docker Hub Login
-      - name: Docker Hub Login
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}  # Provide Docker Hub username
-          password: ${{ secrets.DOCKER_PASSWORD }}  # Provide Docker Hub password
-          
-      # Push Docker Images To Docker Hub
-      - name: Push Docker Images To Docker Hub
-        run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/blog-application:client-${{github.run_number}}
-          docker push ${{ secrets.DOCKER_USERNAME }}/blog-application:api-${{github.run_number}}
-  server:
-      needs: [deploy]
-      name: server login
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v2 
-        - name: Build & Deploy
-          env:
-              PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-              HOSTNAME: ${{secrets.SSH_HOST}}
-              USER_NAME: ${{secrets.USER_NAME}}
+          # Save the private key to a file and secure it
+          echo "$PRIVATE_KEY" > private_key
+          chmod 600 private_key
         
-          run: |
-            echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
-            ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} &&'
-  
-                # Now we have got the access of EC2 and we will start the deploy .
-                cd /home/ubuntu/node-app-github-actions &&
-                git pull origin main &&
-                cd /home/ubuntu/node-app-github-actions/api &&
-                npm install &&
-                cd /home/ubuntu/node-app-github-actions/client &&
-                npm install && 
-                pm2 restart node-backend && 
-                pm2 restart vite-frontend
-                '
+          # SSH into the server
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} << EOF
+            # Navigate to the project directory and deploy
+            cd /home/ubuntu/node-app-github-actions || { echo "Directory not found"; exit 1; }
+            git pull origin main || { echo "Git pull failed"; exit 1; }
+        
+            # Install dependencies for the backend
+            cd /home/ubuntu/node-app-github-actions/api || { echo "Backend directory not found"; exit 1; }
+            npm install || { echo "Backend npm install failed"; exit 1; }
+        
+            # Install dependencies for the frontend
+            cd /home/ubuntu/node-app-github-actions/client || { echo "Frontend directory not found"; exit 1; }
+            npm install || { echo "Frontend npm install failed"; exit 1; }
+        
+            # Restart backend and frontend services
+            pm2 restart node-backend || { echo "Failed to restart backend service"; exit 1; }
+            pm2 restart vite-frontend || { echo "Failed to restart frontend service"; exit 1; }
+          EOF
+        
